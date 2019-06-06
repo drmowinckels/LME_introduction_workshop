@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+  <head>
+    <title>Linear mixed models in R</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Athanasia Monika Mowinckel" />
+    <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
+    <link rel="stylesheet" href="lcbc-uio.css" type="text/css" />
+    <link rel="stylesheet" href="lcbc-uio-fonts.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: middle, right, title-slide
+
+# Linear mixed models in R
+## - consepts - execution - inspection -
+### Athanasia Monika Mowinckel
+### June 5<sup>th</sup> 2019
+
+---
+
+
+layout: true
+
+&lt;div class="my-sidebar"&gt;&lt;/div&gt; 
+
+---
+
+
+
+# Linear mixed models - why?
+
+.pull-left[
+In statistics we are usually taught only to do linear regressions, like t-tests and anova. 
+These are good options when you have single observations per entity, and entity can for instance be a person or a location. 
+If you have repeated observations from the same entity, or there is some hierarchical structure to your data in a way, i.e. your dependent obsverations correlate in some way, a linear mixed model might suit your needs more. 
+]
+
+.pull-right[
+Mixed models have many names, like our favourite pets:  
+
+- hierarchical models  
+- linear mixed models 
+- linear mixed effects  
+- multi-level models  
+
+When searching for information on mixed models, try all these terms, they will give you good coverage of the subject. These terms are not completely synonymous to eachother, but searches on these will help you identify what model applies to your data.
+]
+
+
+---
+
+# Linear mixed models - why?
+.pull-left[
+**Linear models**   
+
+- Homoscedastic (equal variances)  
+
+- No autocorrelation  
+
+- Resudials should be normally distributed  
+]
+
+.pull-right[
+**Linear mixed models**  
+
+- Handles autocorrelation through _random_ terms  
+
+- Handles heteroscedasticity through _random_ terms  
+
+- Residuals need not be normally distributed  
+
+- When _linear model_ assumptions are met, generally gives same results in large data sets  
+]
+
+---
+class: dark, center, middle
+
+# Get started
+## Inspecting the data
+
+---
+
+# Getting started
+
+Let's dig into it. We will be using a data set used by Garbiela K Hajduk in her introcution to LME [blogpost](https://gkhajduk.github.io/2017-03-09-mixed-models/). I did this workshop with the gapminder data before, but while it works nicely for running LME's, it has some properties making some highlighted advantages to using LME's difficult ro illustrate. You can download the data here: [http://gkhajduk.d.pr/9GPn/3nbbPoK6](http://gkhajduk.d.pr/9GPn/3nbbPoK6)
+
+.pull-left[
+
+```r
+load("dragons.RData")
+```
+
+```r
+library(tidyverse, quietly = T)
+dragons &lt;- as_tibble(dragons)
+```
+]
+
+.pull-right[
+![](https://vignette.wikia.nocookie.net/gameofthrones/images/e/e0/Dragons_S8_Ep_1.jpg/revision/latest/scale-to-width-down/2000?cb=20190415031732)&lt;!-- --&gt;
+]
+
+---
+
+# Getting started
+
+## Hierarchical, long data
+
+.pull-left[
+The background for this data is testing dragon intelligence, in some unknown way, at multiple mountain ranges and several sites. 
+The data is already in long-format, which is where an entity has as many rows of data as observations. As you see in the top part of the data, each mountaint rage several rows of data and multiple sites. This dataset is a great dataset for this workshop because it has a nice hierarchy, we do not only have mountain ranges, but sites are nested within mountain ranges This information is something we should use as we are building our models. 
+
+As always, we should get to know our data a little before we start. Let's make some plots.
+]
+
+.pull-right[
+![source: https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png](https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png)
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+dragons %&gt;% 
+  ggplot(aes(x=testScore)) + 
+  geom_density(alpha=.5)
+```
+
+&gt; checking the distribution of the data 
+
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/dist1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+dragons %&gt;% 
+  ggplot(aes(x=bodyLength, 
+             y=testScore)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method = "lm", 
+              colour="black") 
+```
+
+- The `geom_smooth` of ggplot can give us a simple linear regression over the data.   
+- It looks like there is an association between dragons body lengths and their intelligence.  
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/plot_smooths-out-1.png)&lt;!-- --&gt;
+]
+
+
+---
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring standard linear models
+
+---
+
+## Some R-syntax information - formula
+.pull-left[
+Running models in R, we use something we call a `formula`. This is basically an unquoted expression of your model specification. 
+
+If you want to predict intelligence by a dragons body length, the corresponding formula would be
+
+`testScore ~ bodyLength`
+
+What is on the left-side of the tilde (`~`) is your dependent variable, and on the right you place you predictors.
+
+Main effects are added on using `+`. Here predicting test score, with body length and mountain range as main effects.
+
+`testScore ~ bodyLength + mountainRange`
+]
+.pull-right[
+
+Interactions are specified with `:`, here predicting intelligence only by the interaction of body length and mountain range.
+
+`testScore ~ bodyLength:mountainRange`
+
+A 'full factorial', a complete mains + interactions can be done as such:
+
+`testScore ~ bodyLength + mountainRange + bodyLength:mountainRange`
+
+or the shorthand with an asterisk (`*`):
+
+`testScore ~ bodyLength * mountainRange `
+]
+
+---
+
+## Linear models - running a simple model
+.pull-left[
+
+```r
+library(broom)
+dragons_lm &lt;- lm(
+  testScore ~ bodyLength, 
+  data=dragons
+)
+
+tidy(dragons_lm) %&gt;% 
+* knitr::kable(format="html",
+*              digits=3)
+```
+
+From here on highlighted code means code you can ignore, it is just there to make the slides prettier.
+]
+
+.pull-right[
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -61.318 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 12.067 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -5.081 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.555 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.060 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.287 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRU49V5H_nEJOSsilgH_Zvv_rowbB1yprlGoNt6fi8bC6rMh4S8" width="100%" /&gt;
+
+]
+
+
+
+---
+
+## Linear models - plot the regression
+
+.pull-left[
+
+```r
+predict_data &lt;- tibble(
+  bodyLength = seq(from = min(dragons$bodyLength), 
+                   to = max(dragons$bodyLength)))
+
+dragons_lm_fit &lt;- augment(
+  dragons_lm, 
+  newdata = predict_data)
+
+dragons_lm_fit %&gt;% 
+  ggplot(aes(x=bodyLength, 
+             y=.fitted)) + 
+  geom_line() + 
+  geom_ribbon(
+    alpha=.5,
+    aes(ymin=.fitted-.se.fit, 
+        ymax=.fitted+.se.fit))
+```
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/plot_lm1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+
+```r
+plot(dragons_lm, which=1)
+```
+
+Simple regressions in R have very easy ways to plot and check for assumption violations, just by plotting the model output. 
+This residuals plot clearly shows that the assumption that the residuals be normally distributed is violated. If they were, the red line would be straight from 0, and the dots would appear to be random around the plot.
+]
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/plot_lm2-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+
+```r
+plot(dragons_lm, which=2)
+```
+
+The normal QQ-plot is another great way to check violations. The dots should fall along the line should as a straight diagonal from corner to corner. 
+This line is not corner-to-corner, and the dots don't all fall along it.
+This means there is something important in the data we are not accounting for.
+]
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/plot_lm3-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+dragons %&gt;% 
+  ggplot(aes(x=testScore, fill=mountainRange)) + 
+  geom_density(alpha=.5)
+```
+
+&gt; checking the distribution of the data to understand what is looks like across natural groups in the data
+
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/dist2-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+
+## Linear models - checking assumption violations
+
+.pull-left[
+
+```r
+dragons %&gt;% 
+  ggplot(aes(x=mountainRange, 
+             y=testScore, 
+             fill=mountainRange)) + 
+  geom_boxplot(alpha=.5) +
+  coord_flip()
+```
+
+By making boxplots for each mountain range we can see data varies substantially across these. We should somehow be incorporating this information in our models. The previous diagnostic plots clearly indicate autocorrelation in our data, and we know this, because each subsequent observation for a mountain range is correlated to the last observation.
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/box1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+dragons %&gt;% 
+  ggplot(aes(x=bodyLength, 
+             y=testScore,
+*            group = mountainRange,
+             colour = mountainRange)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method = "lm") 
+```
+
+- If we split the data up into the different mountain ranges, we can see there is great variation in the intelligence and size of the dragons in the different mountain ranges.  
+- Our model should account for this variability when trying to see if there is a true relatioship between the length and intelligence of a dragon.    
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/plot_smooths1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear models - adding a covariate
+.pull-left[
+
+```r
+dragons_lm_mount &lt;- lm(
+  testScore ~ bodyLength + mountainRange, 
+  data=dragons
+)
+
+tidy(dragons_lm_mount) %&gt;% 
+* knitr::kable(format="html",
+*              digits=3)
+```
+]
+
+.pull-right[
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.831 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.472 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.439 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.151 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.013 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.080 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.159 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.874 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeCentral &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.583 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.599 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.164 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeEmmental &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.209 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.697 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.385 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeJulian &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 45.115 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.190 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.767 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeLigurian &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 17.748 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.674 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.831 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeMaritime &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 49.881 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.139 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.890 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeSarntal &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 41.978 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.197 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.130 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeSouthern &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.520 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 2.731 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.119 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.002 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+Adding a covariate is not helping our assumption violations. 
+
+**TASK:** Try adding an interaction term. See if the assumption violations are improved by this.
+]
+
+.pull-right[
+
+```r
+plot(dragons_lm_mount, which=2)
+```
+
+![](lme_UseR_Oslo_2019_files/figure-html/unnamed-chunk-6-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear models - adding a covariate
+.pull-left[
+
+```r
+dragons_lm_mountInt &lt;- lm(
+  testScore ~ bodyLength * mountainRange, 
+  data=dragons
+)
+
+tidy(dragons_lm_mountInt) %&gt;% 
+* knitr::kable(format="html",
+*              digits=3)
+```
+]
+
+.pull-right[
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -44.834 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.123 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1.241 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.215 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.378 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.201 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.884 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.060 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeCentral &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 160.671 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 80.791 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.989 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.047 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeEmmental &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.053 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 56.854 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.106 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.915 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeJulian &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 180.106 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 58.222 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.093 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.002 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeLigurian &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 118.255 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 57.064 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 2.072 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.039 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeMaritime &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 140.017 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 86.033 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.627 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.104 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeSarntal &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 116.391 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 53.117 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 2.191 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.029 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; mountainRangeSouthern &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 90.017 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 52.225 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.724 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.085 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength:mountainRangeCentral &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.644 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.399 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1.614 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.107 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength:mountainRangeEmmental &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.006 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.289 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.020 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.984 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength:mountainRangeJulian &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.681 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.289 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -2.358 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.019 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength:mountainRangeLigurian &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.530 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.290 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1.829 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.068 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength:mountainRangeMaritime &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.488 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.440 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1.109 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.268 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength:mountainRangeSarntal &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.409 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.279 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1.465 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.143 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength:mountainRangeSouthern &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.453 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.290 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1.563 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.119 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+Adding an interaction is not helping our assumption violations. 
+
+We need to be handling the autocorrelation somehow. An alternative is to aggregate data across mountain ranges and use the aggregated data for analysis. But that is data reduction, and you will be loosing alot of power and cannot neatly account for the variability in the data.
+]
+
+.pull-right[
+
+```r
+plot(dragons_lm_mountInt, which=2)
+```
+
+![](lme_UseR_Oslo_2019_files/figure-html/unnamed-chunk-7-1.png)&lt;!-- --&gt;
+]
+
+
+---
+
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring linear mixed models
+
+---
+
+## Linear mixed models
+.pull-left[
+
+```r
+library(lme4)
+dragons_lme_mount &lt;- lmer(
+  testScore ~ bodyLength + (1|mountainRange), 
+  data = dragons
+)
+```
+]
+
+.pull-right[
+In the package `lme4` a random effect (autororrelation specification)  is added with the formulaeic expression `(1|entity)`, which will fit an independent intercept per entity. In this case, our entity is mountain range. 
+
+You may also use the package `nlme` for linear mixed models, but you specify the random effect differently. 
+]
+
+
+```r
+tidy(dragons_lme_mount) %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 43.709380 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 17.1348869 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 2.5508998 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.033165 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0786466 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.4216961 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).mountainRange &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.430156 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; mountainRange &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.960422 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+
+```r
+qqnorm(resid(dragons_lme_mount))
+qqline(resid(dragons_lme_mount))
+```
+
+With LMEs we no longer get QQ plots to inspect, so we need to force one with some extra coding. The dots are more nicely on the line now, with only a few stragglers. But there **are** straglers! 
+
+There is still something in the data we are not accounting for. Within each mountain range, there are several sites. There might be site trends that might help our model work better, and also we can utilise partial pooling, as the intercepts of sites within mountain ranges will be shrunk towards the mountain range estimate. This increases our degrees of freedom, ergo more power!
+]
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/resid-1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - random intercepts
+First we need to make sites unique, as they are meaningless without being attached to their mountain range.
+Let's first just try _just_ adding the unique site as a random effect. This will **not** nest the sites within mountai rages, and we will not get parital pooling. We ignore the hierarchical structure of the data, but would like to see if this makes any difference to our model. 
+.pull-left[
+
+```r
+dragons &lt;- dragons %&gt;% 
+  mutate(siteUniq = factor(
+    mountainRange:site
+  ))
+
+dragons_lme_mountS &lt;- lmer(
+  testScore ~ bodyLength + 
+    (1|mountainRange) + (1|siteUniq), 
+  data=dragons)
+```
+]
+
+.pull-right[
+
+```r
+tidy(dragons_lme_mountS) %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 40.0666846 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.8637262 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.8325643 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0512593 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.1036823 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.4943882 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).siteUniq &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.8052854 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; siteUniq &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).mountainRange &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.0986815 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; mountainRange &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.4422846 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+]
+
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+
+```r
+qqnorm(resid(dragons_lme_mountS))
+qqline(resid(dragons_lme_mountS))
+```
+
+The QQ is even better now. Most lines fall directly or very close to the line, and it's almost directly from corner to corner.
+
+]
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/resid-2-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - random intercepts
+
+
+```r
+dragons_lme_mountSnest &lt;- lmer(testScore ~ bodyLength + 
+                                 (1|mountainRange) + (1|mountainRange:site), 
+                               data=dragons)
+
+broom::tidy(dragons_lme_mountSnest) %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 40.0666846 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.8637262 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.8325643 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; bodyLength &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0512593 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.1036823 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.4943882 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).mountainRange:site &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.8052854 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; mountainRange:site &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).mountainRange &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.0986815 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; mountainRange &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.4422846 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+
+```r
+qqnorm(resid(dragons_lme_mountSnest))
+qqline(resid(dragons_lme_mountSnest))
+```
+
+The last two models are actually identical, due to the way they have been set up. This tok me quite some time to understand, and is not so intuitive to me. 
+
+But because `siteUniq` is unique for each site, and we have `(1|mountainRange)` in the formula too, these actually become nested. Some prefer having this type of synatx, while for me it makesmore intuitive sense to state the nesting formulaeically with `(1|mountainRange) + (1|mountainRange:site)`.
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/resid-3-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - Comparing models
+When comparing models, which is the real advantage when using mixed models, and the likelihood function it uses, we want to find the model with lowest AIC and/or BIC, but also to keep in mind what model best formulates the known structure of the data.
+
+In this case, all models are performing more or less equally, and so we will keep with the nested model, which preserves more of the data structure.
+
+
+```r
+anova(dragons_lme_mount, 
+      dragons_lme_mountS, 
+      dragons_lme_mountSnest) %&gt;% 
+  tidy() %&gt;% 
+* knitr::kable(format="html")
+```
+
+```
+## refitting model(s) with ML (instead of REML)
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; AIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; BIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; logLik &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; deviance &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; Chi.Df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; dragons_lme_mount &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4001.478 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4018.173 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1996.739 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3993.478 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; dragons_lme_mountS &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3988.767 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4009.636 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1989.384 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3978.767 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.71065 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0001253 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; dragons_lme_mountSnest &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3988.767 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4009.636 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1989.384 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3978.767 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.00000 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.0000000 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - Comparing models
+
+R tells us that the models are refitted with ML instead of REML. This is necessary for model comparison, and it's very handy that this is done for us, so we don't have to keep running models in parallell for comparisons. 
+
+You can now also see that the two models with the different ways of nesting have identical values, and give the same output. So now we know that. 
+
+The next question is, how do we know that any of these models are better than the null, i.e. that there is no relationship between body length and intelligence? 
+
+We should run a "null" model, and add this to the models comparisons table.
+
+**TASK:** Run the "null" model, check the QQ-plot, and add it to the model comparisons.  
+**HINT:** Formula to just calculate the intercept for a model (the null) is `y ~ 1 + (1|entity)`   
+
+---
+
+## Linear mixed models - Comparing models
+
+
+```r
+dragons_lme_null &lt;- lmer(testScore ~ 1 + 
+                           (1|mountainRange)  + (1|mountainRange:site), 
+                         data=dragons)
+
+broom::tidy(dragons_lme_null) %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 50.38603 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.641254 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.586825 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).mountainRange:site &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.70805 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; mountainRange:site &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).mountainRange &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.49296 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; mountainRange &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.43279 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - Comparing models
+.pull-left[
+
+```r
+qqnorm(resid(dragons_lme_null))
+qqline(resid(dragons_lme_null))
+```
+
+The last two models are actually identical, due to the way they have been set up. This tok me quite some time to understand, and is not so intuitive to me. 
+
+But because `siteUniq` is unique for each site, and we have `(1|mountainRange)` in the formula too, these actually become nested. Some prefer having this type of synatx, while for me it makesmore intuitive sense to state the nesting formulaeically with `(1|mountainRange) + (1|mountainRange:site)`.
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/resid-4-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - Comparing models
+
+
+
+```r
+anova(dragons_lme_null, 
+      dragons_lme_mountSnest) %&gt;% 
+  tidy() %&gt;% 
+* knitr::kable(format="html")
+```
+
+```
+## refitting model(s) with ML (instead of REML)
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; AIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; BIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; logLik &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; deviance &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; Chi.Df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; dragons_lme_null &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3987.054 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4003.749 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1989.527 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3979.054 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; dragons_lme_mountSnest &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3988.767 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4009.636 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -1989.384 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3978.767 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.2867604 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.5923041 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - Inspecting the fit
+.pull-left[
+Lets have a look at our fit. Make a data.frame with the variable of interest, `bodyLength`, spanning the time to predict in and run a prediction to get the fits. We also add a standard linear smooth and see if that is different.
+
+
+```r
+predict_data$fit = predict(
+  dragons_lme_mountSnest, 
+  newdata=predict_data, 
+  re.form=NA)
+
+ggplot(dragons, 
+       aes(x=bodyLength, y=testScore)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method="lm") +
+  geom_line(data=predict_data,
+            colour="forestgreen",
+            aes(y=fit))
+```
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/pred1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - Inspecting the fit
+
+.pull-left[
+In this case, we can see that running an LME has very clearly altered our inference. The simple linear regression clearly indicated that there was a relationship between body length and intelligence, but violated model assumptions.
+
+When running LME that accounted for autocorrelation in the data, the indicated relationship between body length and intelligence went up in flames. 
+]
+
+.pull-right[
+![](lme_UseR_Oslo_2019_files/figure-html/pred2-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+
+# Playing with other data
+
+.pull-left[
+If we have time, we can have a look at applying some of this to the `gapminder` data. 
+I have used this data for this workshop before, and they are nice to use for understading the specification of random effects, and one can even try random _slopes_, which we have not covered here.
+
+My slides using that can be found here: https://athanasiamo.github.io/RLadies-London-LMM-2019/#1
+]
+
+.pull-right[
+![](https://usercontent1.hubstatic.com/14112116_f520.jpg)&lt;!-- --&gt;
+]
+
+---
+# More resources on LMM's 
+
+### - Julia Pilowski's [practical guide](https://www.juliapilowsky.com/2018/10/19/a-practical-guide-to-mixed-models-in-r/)  
+### - Bodo Winters' [tutorials and data](http://www.bodowinter.com/tutorials.html)
+### - Jared Knowles' [getting started](https://www.jaredknowles.com/journal/2013/11/25/getting-started-with-mixed-effect-models-in-r)
+### - B. Bolker's [mixed models in R](https://rpubs.com/bbolker/3336)
+### - Gabriela Hadjuk's [introduction](https://gkhajduk.github.io/2017-03-09-mixed-models/) - whose data I have borrowed for this workshop  
+
+---
+class: center 
+
+# Shameless self-promotion
+
+&lt;img src="lme_rladies_london_files/Screenshot-2019-03-26-at-16.41.58.png" width="80%" /&gt;
+
+### [drmowinckels.io](https://drmowinckels.io)
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false,
+"ratio": "16:9"
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();</script>
+
+<script>
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

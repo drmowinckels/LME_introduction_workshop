@@ -1,0 +1,10 @@
+---
+title: "Slides for my LME workshops"
+author: "Athanasia Monika Mowinckel"
+output: html_document
+---
+
+Here you can find the slides I use for my workshops. I slowly adapt my workshop every time I teach it, using the experience from each to improve it (I hope).  
+
+- March 2019: [RLadies London](lme_rladies_london.html)  
+- June 2019 [useR! Oslo](lme_UseR_Oslo_2019.html)  

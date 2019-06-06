@@ -1,0 +1,725 @@
+---
+title: "Linear mixed models in R"
+subtitle: "- consepts - execution - inspection -"
+author: "Athanasia Monika Mowinckel"
+date: "June 5^th^ 2019"
+output:
+  xaringan::moon_reader:
+    css: [lcbc-uio.css, lcbc-uio-fonts.css, default]
+    lib_dir: libs
+    nature:
+      titleSlideClass: [middle, right]
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false 
+      ratio: "16:9"
+---
+
+layout: true
+
+<div class="my-sidebar"></div> 
+
+---
+
+```{r setup, include=FALSE}
+# Here you can place global options for the entire document.
+# Mostly used for knitr settings, but can also load data etc.
+# Whatever happens here will not show in the presentation.
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(lme4)
+library(tidyverse)
+library(broom)
+load("../dragons.RData")
+```
+
+# Linear mixed models - why?
+
+.pull-left[
+In statistics we are usually taught only to do linear regressions, like t-tests and anova. 
+These are good options when you have single observations per entity, and entity can for instance be a person or a location. 
+If you have repeated observations from the same entity, or there is some hierarchical structure to your data in a way, i.e. your dependent obsverations correlate in some way, a linear mixed model might suit your needs more. 
+]
+
+.pull-right[
+Mixed models have many names, like our favourite pets:  
+
+- hierarchical models  
+- linear mixed models 
+- linear mixed effects  
+- multi-level models  
+
+When searching for information on mixed models, try all these terms, they will give you good coverage of the subject. These terms are not completely synonymous to eachother, but searches on these will help you identify what model applies to your data.
+]
+
+
+---
+
+# Linear mixed models - why?
+.pull-left[
+**Linear models**   
+
+- Homoscedastic (equal variances)  
+
+- No autocorrelation  
+
+- Resudials should be normally distributed  
+]
+
+.pull-right[
+**Linear mixed models**  
+
+- Handles autocorrelation through _random_ terms  
+
+- Handles heteroscedasticity through _random_ terms  
+
+- Residuals need not be normally distributed  
+
+- When _linear model_ assumptions are met, generally gives same results in large data sets  
+]
+
+---
+class: dark, center, middle
+
+# Get started
+## Inspecting the data
+
+---
+
+# Getting started
+
+Let's dig into it. We will be using a data set used by Garbiela K Hajduk in her introcution to LME [blogpost](https://gkhajduk.github.io/2017-03-09-mixed-models/). I did this workshop with the gapminder data before, but while it works nicely for running LME's, it has some properties making some highlighted advantages to using LME's difficult ro illustrate. You can download the data here: [http://gkhajduk.d.pr/9GPn/3nbbPoK6](http://gkhajduk.d.pr/9GPn/3nbbPoK6)
+
+.pull-left[
+```{r eval=F}
+load("dragons.RData")
+```
+```{r}
+library(tidyverse, quietly = T)
+dragons <- as_tibble(dragons)
+```
+]
+
+.pull-right[
+```{r echo=F}
+knitr::include_graphics("https://vignette.wikia.nocookie.net/gameofthrones/images/e/e0/Dragons_S8_Ep_1.jpg/revision/latest/scale-to-width-down/2000?cb=20190415031732")
+```
+]
+
+---
+
+# Getting started
+
+## Hierarchical, long data
+
+.pull-left[
+The background for this data is testing dragon intelligence, in some unknown way, at multiple mountain ranges and several sites. 
+The data is already in long-format, which is where an entity has as many rows of data as observations. As you see in the top part of the data, each mountaint rage several rows of data and multiple sites. This dataset is a great dataset for this workshop because it has a nice hierarchy, we do not only have mountain ranges, but sites are nested within mountain ranges This information is something we should use as we are building our models. 
+
+As always, we should get to know our data a little before we start. Let's make some plots.
+]
+
+.pull-right[
+```{r echo=F, fig.cap="source: https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png"}
+knitr::include_graphics("https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png")
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r dist1, eval=F, message=FALSE, warning = FALSE}
+dragons %>% 
+  ggplot(aes(x=testScore)) + 
+  geom_density(alpha=.5)
+```
+
+> checking the distribution of the data 
+
+]
+
+.pull-right[
+```{r dist1-out, echo=F, ref.label="dist1", message=FALSE, warning = FALSE}
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r plot_smooths, eval = F} 
+dragons %>% 
+  ggplot(aes(x=bodyLength, 
+             y=testScore)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method = "lm", 
+              colour="black") 
+```
+
+- The `geom_smooth` of ggplot can give us a simple linear regression over the data.   
+- It looks like there is an association between dragons body lengths and their intelligence.  
+]
+
+.pull-right[
+```{r plot_smooths-out, ref.label="plot_smooths", echo=F, warning=F}
+```
+]
+
+
+---
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring standard linear models
+
+---
+
+## Some R-syntax information - formula
+.pull-left[
+Running models in R, we use something we call a `formula`. This is basically an unquoted expression of your model specification. 
+
+If you want to predict intelligence by a dragons body length, the corresponding formula would be
+
+`testScore ~ bodyLength`
+
+What is on the left-side of the tilde (`~`) is your dependent variable, and on the right you place you predictors.
+
+Main effects are added on using `+`. Here predicting test score, with body length and mountain range as main effects.
+
+`testScore ~ bodyLength + mountainRange`
+]
+.pull-right[
+
+Interactions are specified with `:`, here predicting intelligence only by the interaction of body length and mountain range.
+
+`testScore ~ bodyLength:mountainRange`
+
+A 'full factorial', a complete mains + interactions can be done as such:
+
+`testScore ~ bodyLength + mountainRange + bodyLength:mountainRange`
+
+or the shorthand with an asterisk (`*`):
+
+`testScore ~ bodyLength * mountainRange `
+]
+
+---
+
+## Linear models - running a simple model
+.pull-left[
+```{r tab-lm1, eval=F}
+library(broom)
+dragons_lm <- lm(
+  testScore ~ bodyLength, 
+  data=dragons
+)
+
+tidy(dragons_lm) %>% 
+  knitr::kable(format="html", #<<
+               digits=3) #<<
+```
+
+From here on highlighted code means code you can ignore, it is just there to make the slides prettier.
+]
+
+.pull-right[
+```{r tab-lm1-out, ref.label="tab-lm1", echo=F, warning=F}
+```
+
+```{r echo=F, out.width="100%"}
+knitr::include_graphics("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRU49V5H_nEJOSsilgH_Zvv_rowbB1yprlGoNt6fi8bC6rMh4S8")
+```
+
+]
+
+
+
+---
+
+## Linear models - plot the regression
+
+.pull-left[
+```{r plot_lm1, eval=F}
+predict_data <- tibble(
+  bodyLength = seq(from = min(dragons$bodyLength), 
+                   to = max(dragons$bodyLength)))
+
+dragons_lm_fit <- augment(
+  dragons_lm, 
+  newdata = predict_data)
+
+dragons_lm_fit %>% 
+  ggplot(aes(x=bodyLength, 
+             y=.fitted)) + 
+  geom_line() + 
+  geom_ribbon(
+    alpha=.5,
+    aes(ymin=.fitted-.se.fit, 
+        ymax=.fitted+.se.fit))
+```
+]
+
+.pull-right[
+```{r plot_lm1-out, ref.label="plot_lm1", echo=F, warning=F, message=F}
+```
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+```{r "plot_lm2", eval=FALSE}
+plot(dragons_lm, which=1)
+```
+
+Simple regressions in R have very easy ways to plot and check for assumption violations, just by plotting the model output. 
+This residuals plot clearly shows that the assumption that the residuals be normally distributed is violated. If they were, the red line would be straight from 0, and the dots would appear to be random around the plot.
+]
+.pull-right[
+```{r plot_lm2-out, ref.label="plot_lm2", echo=F, warning=F, message=F}
+```
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+```{r "plot_lm3", eval=FALSE}
+plot(dragons_lm, which=2)
+```
+
+The normal QQ-plot is another great way to check violations. The dots should fall along the line should as a straight diagonal from corner to corner. 
+This line is not corner-to-corner, and the dots don't all fall along it.
+This means there is something important in the data we are not accounting for.
+]
+.pull-right[
+```{r plot_lm3-out, ref.label="plot_lm3", echo=F, warning=F, message=F}
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r dist2, eval=F, message=FALSE, warning = FALSE}
+dragons %>% 
+  ggplot(aes(x=testScore, fill=mountainRange)) + 
+  geom_density(alpha=.5)
+```
+
+> checking the distribution of the data to understand what is looks like across natural groups in the data
+
+]
+
+.pull-right[
+```{r dist2-out, echo=F, ref.label="dist2", message=FALSE, warning = FALSE}
+```
+]
+
+---
+
+
+## Linear models - checking assumption violations
+
+.pull-left[
+```{r box1, eval=F}
+dragons %>% 
+  ggplot(aes(x=mountainRange, 
+             y=testScore, 
+             fill=mountainRange)) + 
+  geom_boxplot(alpha=.5) +
+  coord_flip()
+```
+
+By making boxplots for each mountain range we can see data varies substantially across these. We should somehow be incorporating this information in our models. The previous diagnostic plots clearly indicate autocorrelation in our data, and we know this, because each subsequent observation for a mountain range is correlated to the last observation.
+]
+
+.pull-right[
+```{r box1-out, ref.label="box1", echo=F, warning=F, message=F}
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r plot_smooths1, eval = F} 
+dragons %>% 
+  ggplot(aes(x=bodyLength, 
+             y=testScore,
+             group = mountainRange, #<< 
+             colour = mountainRange)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method = "lm") 
+```
+
+- If we split the data up into the different mountain ranges, we can see there is great variation in the intelligence and size of the dragons in the different mountain ranges.  
+- Our model should account for this variability when trying to see if there is a true relatioship between the length and intelligence of a dragon.    
+]
+
+.pull-right[
+```{r plot_smooths1-out, ref.label="plot_smooths1", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear models - adding a covariate
+.pull-left[
+```{r tab-lm2, eval=F}
+dragons_lm_mount <- lm(
+  testScore ~ bodyLength + mountainRange, 
+  data=dragons
+)
+
+tidy(dragons_lm_mount) %>% 
+  knitr::kable(format="html", #<<
+               digits=3) #<<
+```
+]
+
+.pull-right[
+```{r tab-lm2-out, ref.label="tab-lm2", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+Adding a covariate is not helping our assumption violations. 
+
+**TASK:** Try adding an interaction term. See if the assumption violations are improved by this.
+]
+
+.pull-right[
+```{r}
+plot(dragons_lm_mount, which=2)
+```
+]
+
+---
+
+## Linear models - adding a covariate
+.pull-left[
+```{r tab-lm3, eval=F}
+dragons_lm_mountInt <- lm(
+  testScore ~ bodyLength * mountainRange, 
+  data=dragons
+)
+
+tidy(dragons_lm_mountInt) %>% 
+  knitr::kable(format="html", #<<
+               digits=3) #<<
+```
+]
+
+.pull-right[
+```{r tab-lm3-out, ref.label="tab-lm3", echo=F, warning=F}
+```
+]
+
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+Adding an interaction is not helping our assumption violations. 
+
+We need to be handling the autocorrelation somehow. An alternative is to aggregate data across mountain ranges and use the aggregated data for analysis. But that is data reduction, and you will be loosing alot of power and cannot neatly account for the variability in the data.
+]
+
+.pull-right[
+```{r}
+plot(dragons_lm_mountInt, which=2)
+```
+]
+
+
+---
+
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring linear mixed models
+
+---
+
+## Linear mixed models
+.pull-left[
+```{r}
+library(lme4)
+dragons_lme_mount <- lmer(
+  testScore ~ bodyLength + (1|mountainRange), 
+  data = dragons
+)
+```
+]
+
+.pull-right[
+In the package `lme4` a random effect (autororrelation specification)  is added with the formulaeic expression `(1|entity)`, which will fit an independent intercept per entity. In this case, our entity is mountain range. 
+
+You may also use the package `nlme` for linear mixed models, but you specify the random effect differently. 
+]
+
+```{r}
+tidy(dragons_lme_mount) %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+```{r resid-1, eval=F, fig.show='hold'} 
+qqnorm(resid(dragons_lme_mount))
+qqline(resid(dragons_lme_mount))
+```
+
+With LMEs we no longer get QQ plots to inspect, so we need to force one with some extra coding. The dots are more nicely on the line now, with only a few stragglers. But there **are** straglers! 
+
+There is still something in the data we are not accounting for. Within each mountain range, there are several sites. There might be site trends that might help our model work better, and also we can utilise partial pooling, as the intercepts of sites within mountain ranges will be shrunk towards the mountain range estimate. This increases our degrees of freedom, ergo more power!
+]
+.pull-right[
+```{r resid-1-out, ref.label="resid-1", echo=F, warning=F, fig.show='hold'}
+```
+]
+
+---
+
+## Linear mixed models - random intercepts
+First we need to make sites unique, as they are meaningless without being attached to their mountain range.
+Let's first just try _just_ adding the unique site as a random effect. This will **not** nest the sites within mountai rages, and we will not get parital pooling. We ignore the hierarchical structure of the data, but would like to see if this makes any difference to our model. 
+.pull-left[
+```{r}
+dragons <- dragons %>% 
+  mutate(siteUniq = factor(
+    mountainRange:site
+  ))
+
+dragons_lme_mountS <- lmer(
+  testScore ~ bodyLength + 
+    (1|mountainRange) + (1|siteUniq), 
+  data=dragons)
+```
+]
+
+.pull-right[
+```{r}
+tidy(dragons_lme_mountS) %>% 
+  knitr::kable(format="html") #<<
+```
+
+]
+
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+```{r resid-2, fig.show='hold', eval=FALSE} 
+qqnorm(resid(dragons_lme_mountS))
+qqline(resid(dragons_lme_mountS))
+```
+
+The QQ is even better now. Most lines fall directly or very close to the line, and it's almost directly from corner to corner.
+
+]
+.pull-right[
+```{r resid-2-out, ref.label="resid-2", echo=F, warning=F, fig.show='hold'}
+```
+]
+
+---
+
+## Linear mixed models - random intercepts
+
+```{r}
+dragons_lme_mountSnest <- lmer(testScore ~ bodyLength + 
+                                 (1|mountainRange) + (1|mountainRange:site), 
+                               data=dragons)
+
+broom::tidy(dragons_lme_mountSnest) %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+```{r resid-3, eval=F} 
+qqnorm(resid(dragons_lme_mountSnest))
+qqline(resid(dragons_lme_mountSnest))
+```
+
+The last two models are actually identical, due to the way they have been set up. This tok me quite some time to understand, and is not so intuitive to me. 
+
+But because `siteUniq` is unique for each site, and we have `(1|mountainRange)` in the formula too, these actually become nested. Some prefer having this type of synatx, while for me it makesmore intuitive sense to state the nesting formulaeically with `(1|mountainRange) + (1|mountainRange:site)`.
+]
+
+.pull-right[
+```{r resid-3-out, ref.label="resid-3", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear mixed models - Comparing models
+When comparing models, which is the real advantage when using mixed models, and the likelihood function it uses, we want to find the model with lowest AIC and/or BIC, but also to keep in mind what model best formulates the known structure of the data.
+
+In this case, all models are performing more or less equally, and so we will keep with the nested model, which preserves more of the data structure.
+
+```{r warning=FALSE}
+anova(dragons_lme_mount, 
+      dragons_lme_mountS, 
+      dragons_lme_mountSnest) %>% 
+  tidy() %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - Comparing models
+
+R tells us that the models are refitted with ML instead of REML. This is necessary for model comparison, and it's very handy that this is done for us, so we don't have to keep running models in parallell for comparisons. 
+
+You can now also see that the two models with the different ways of nesting have identical values, and give the same output. So now we know that. 
+
+The next question is, how do we know that any of these models are better than the null, i.e. that there is no relationship between body length and intelligence? 
+
+We should run a "null" model, and add this to the models comparisons table.
+
+**TASK:** Run the "null" model, check the QQ-plot, and add it to the model comparisons.  
+**HINT:** Formula to just calculate the intercept for a model (the null) is `y ~ 1 + (1|entity)`   
+
+---
+
+## Linear mixed models - Comparing models
+
+```{r}
+dragons_lme_null <- lmer(testScore ~ 1 + 
+                           (1|mountainRange)  + (1|mountainRange:site), 
+                         data=dragons)
+
+broom::tidy(dragons_lme_null) %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - Comparing models
+.pull-left[
+```{r resid-4, eval=F} 
+qqnorm(resid(dragons_lme_null))
+qqline(resid(dragons_lme_null))
+```
+
+The last two models are actually identical, due to the way they have been set up. This tok me quite some time to understand, and is not so intuitive to me. 
+
+But because `siteUniq` is unique for each site, and we have `(1|mountainRange)` in the formula too, these actually become nested. Some prefer having this type of synatx, while for me it makesmore intuitive sense to state the nesting formulaeically with `(1|mountainRange) + (1|mountainRange:site)`.
+]
+
+.pull-right[
+```{r resid-4-out, ref.label="resid-4", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear mixed models - Comparing models
+
+
+```{r warning=FALSE}
+anova(dragons_lme_null, 
+      dragons_lme_mountSnest) %>% 
+  tidy() %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - Inspecting the fit
+.pull-left[
+Lets have a look at our fit. Make a data.frame with the variable of interest, `bodyLength`, spanning the time to predict in and run a prediction to get the fits. We also add a standard linear smooth and see if that is different.
+
+```{r pred1, eval=F}
+
+predict_data$fit = predict(
+  dragons_lme_mountSnest, 
+  newdata=predict_data, 
+  re.form=NA)
+
+ggplot(dragons, 
+       aes(x=bodyLength, y=testScore)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method="lm") +
+  geom_line(data=predict_data,
+            colour="forestgreen",
+            aes(y=fit))
+```
+]
+
+.pull-right[
+```{r pred1-out, ref.label="pred1", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear mixed models - Inspecting the fit
+
+.pull-left[
+In this case, we can see that running an LME has very clearly altered our inference. The simple linear regression clearly indicated that there was a relationship between body length and intelligence, but violated model assumptions.
+
+When running LME that accounted for autocorrelation in the data, the indicated relationship between body length and intelligence went up in flames. 
+]
+
+.pull-right[
+```{r pred2-out, ref.label="pred1", echo=F, warning=F}
+```
+]
+
+---
+
+
+# Playing with other data
+
+.pull-left[
+If we have time, we can have a look at applying some of this to the `gapminder` data. 
+I have used this data for this workshop before, and they are nice to use for understading the specification of random effects, and one can even try random _slopes_, which we have not covered here.
+
+My slides using that can be found here: https://athanasiamo.github.io/RLadies-London-LMM-2019/#1
+]
+
+.pull-right[
+```{r echo=FALSE}
+knitr::include_graphics("https://usercontent1.hubstatic.com/14112116_f520.jpg")
+```
+]
+
+---
+# More resources on LMM's 
+
+### - Julia Pilowski's [practical guide](https://www.juliapilowsky.com/2018/10/19/a-practical-guide-to-mixed-models-in-r/)  
+### - Bodo Winters' [tutorials and data](http://www.bodowinter.com/tutorials.html)
+### - Jared Knowles' [getting started](https://www.jaredknowles.com/journal/2013/11/25/getting-started-with-mixed-effect-models-in-r)
+### - B. Bolker's [mixed models in R](https://rpubs.com/bbolker/3336)
+### - Gabriela Hadjuk's [introduction](https://gkhajduk.github.io/2017-03-09-mixed-models/) - whose data I have borrowed for this workshop  
+
+---
+class: center 
+
+# Shameless self-promotion
+
+```{r out.width="80%", echo=F}
+knitr::include_graphics("lme_rladies_london_files/Screenshot-2019-03-26-at-16.41.58.png")
+```
+
+### [drmowinckels.io](https://drmowinckels.io)
+
+
+

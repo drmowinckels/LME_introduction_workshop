@@ -1,0 +1,2148 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Linear mixed models in R</title>
+    <meta charset="utf-8">
+    <meta name="author" content="Athanasia Monika Mowinckel" />
+    <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
+    <link rel="stylesheet" href="lcbc-uio.css" type="text/css" />
+    <link rel="stylesheet" href="lcbc-uio-fonts.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: middle, right, title-slide
+
+# Linear mixed models in R
+## - consepts - execution - inspection -
+### Athanasia Monika Mowinckel
+### March 28<sup>th</sup> 2019
+
+---
+
+
+layout: true
+
+&lt;div class="my-sidebar"&gt;&lt;/div&gt; 
+
+---
+
+
+
+# Linear mixed models - why?
+
+.pull-left[
+In statistics we are usually taught only to do linear regressions, like t-tests and anova. 
+These are good options when you have single observations per entity, and entity can for instance be a person or a location. 
+If you have repeated observations from the same entity, or there is some hierarchical structure to your data in a way, i.e. your dependent obsverations correlate in some way, a linear mixed model might suit your needs more. 
+]
+
+.pull-right[
+Mixed models have many names, like our favourite pets:  
+
+- hierarchical models  
+- linear mixed models 
+- linear mixed effects  
+- multi-level models  
+
+When searching for information on mixed models, try all these terms, they will give you good coverage of the subject. These terms are not completely synonymous to eachother, but searches on these will help you identify what model applies to your data.
+]
+
+
+---
+
+# Linear mixed models - why?
+.pull-left[
+**Linear models**   
+
+- Homoscedastic (equal variances)  
+
+- No autocorrelation  
+
+- Resudials should be normally distributed  
+]
+
+.pull-right[
+**Linear mixed models**  
+
+- Handles autocorrelation through _random_ terms  
+
+- Handles heteroscedasticity through _random_ terms  
+
+- Residuals need not be normally distributed  
+
+- When _linear model_ assumptions are met, generally gives same results in large data sets  
+]
+
+---
+class: dark, center, middle
+
+# Get started
+## Inspecting the data
+
+---
+
+# Getting started
+
+Let's dig into it. We will be using the gapminder_sub data for this, as it is already nicely cleaned and in a format that is very well suited for LME's, long format.
+
+
+
+```r
+gapminder_sub &lt;- gapminder::gapminder 
+
+gapminder_sub
+```
+
+```
+## # A tibble: 1,704 x 6
+##    country     continent  year lifeExp      pop gdpPercap
+##    &lt;fct&gt;       &lt;fct&gt;     &lt;int&gt;   &lt;dbl&gt;    &lt;int&gt;     &lt;dbl&gt;
+##  1 Afghanistan Asia       1952    28.8  8425333      779.
+##  2 Afghanistan Asia       1957    30.3  9240934      821.
+##  3 Afghanistan Asia       1962    32.0 10267083      853.
+##  4 Afghanistan Asia       1967    34.0 11537966      836.
+##  5 Afghanistan Asia       1972    36.1 13079460      740.
+##  6 Afghanistan Asia       1977    38.4 14880372      786.
+##  7 Afghanistan Asia       1982    39.9 12881816      978.
+##  8 Afghanistan Asia       1987    40.8 13867957      852.
+##  9 Afghanistan Asia       1992    41.7 16317921      649.
+## 10 Afghanistan Asia       1997    41.8 22227415      635.
+## # … with 1,694 more rows
+```
+
+---
+
+# Getting started
+
+## Hierarchical, long data
+
+.pull-left[
+Long-format data is where an entity has as many rows of data as observations. As you see in the top part of the data, each country as one row of data per year of measurement. `gapminder_sub` is a great dataset for this workshop because it has a nice hierarchy, we do not only have countries, but countries are nested within continents. This information is something we should use as we are building our models. 
+
+As always, we should get to know our data a little before we start. Let's make some plots.
+]
+
+.pull-right[
+![source: https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png](https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png)
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+library(tidyverse)
+gapminder_sub %&gt;% 
+  ggplot(aes(x=lifeExp, 
+             colour=continent)) + 
+  geom_density()
+```
+
+&gt; checking the distribution of the data to understand what is looks like across natural groups in the data
+
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/dist1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+gapminder_sub %&gt;% 
+  filter(year == min(year)) %&gt;% 
+  arrange(lifeExp) %&gt;% 
+  mutate(
+    country = fct_inorder(unique(
+      as.character(country)
+    ))
+  ) %&gt;%
+  
+  ggplot(aes(x=country, y=lifeExp, 
+             fill=continent, 
+             colour=continent)) +
+  geom_histogram(stat="identity") +
+  coord_flip() 
+```
+
+&gt; checking the distribution of the data to understand what is looks like across natural groups in the data
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/lifeexp1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+gapminder_sub %&gt;% 
+  ggplot(aes(x=year, y=lifeExp)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method = "lm", colour="black") 
+```
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/plot_smooths-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+
+```r
+gapminder_sub %&gt;% 
+  ggplot(aes(x=year, y=lifeExp)) + 
+  geom_jitter(alpha=.2) +
+* geom_line(show.legend = FALSE,
+*           aes(group = country,
+*               colour = country)) +
+  geom_smooth(method = "lm", colour="black") 
+```
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/plot_smooths1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring standard linear models
+
+---
+
+## Some R-syntax information - formula
+.pull-left[
+Running models in R, we use something we call a `formula`. This is basically an unquoted expression of your model specification. 
+
+If you want to predict life expentancy by the year of measurement, the corresponding formula would be
+
+`lifeExp ~ year`
+
+What is on the left-side of the tilde (`~`) is your dependent variable, and on the right you place you predictors. 
+]
+.pull-right[
+Main effects are added on using `+`. Here predicting life expectancy, with year and country as main effects.
+
+`lifeExp ~ year + country`
+
+Interactions are specified with `:`, here predicting life expectansy only by the interaction of year and country.
+
+`lifeExp ~ year:country`
+
+A 'full factorial', a complete mains + interactions can be done as such:
+
+`lifeExp ~ year + country + year:country`
+
+or the shorthand with an asteri (`*`):
+
+`lifeExp ~ year * country`
+]
+
+---
+
+## Linear models - running a simple model
+.pull-left[
+
+```r
+library(broom)
+lifeEx_year &lt;- lm(lifeExp ~ year, 
+                  data=gapminder_sub)
+
+tidy(lifeEx_year) %&gt;% 
+* knitr::kable(format="html",
+*              digits=3)
+```
+
+From here on highlighted code means code you can ignore, it is just there to make the slides prettier.
+]
+
+.pull-right[
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -585.652 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.314 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -18.124 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; year &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.326 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.016 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.965 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+--
+&lt;div style="text-align: center"&gt;
+&lt;div class="figure"&gt;
+&lt;img src="https://assets.rbl.ms/14068114/980x.jpg" alt="source: https://assets.rbl.ms/14068114/980x.jpg" width="30%" /&gt;
+&lt;p class="caption"&gt;source: https://assets.rbl.ms/14068114/980x.jpg&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+---
+
+## Linear models - plot the regression
+
+.pull-left[
+
+```r
+lifeEx_year_fit &lt;- augment(lifeEx_year)
+beta &lt;- paste0("beta = ", 
+               round(
+                 lifeEx_year$coefficients[2],2
+               ))
+
+lifeEx_year_fit %&gt;% 
+  ggplot(aes(x=year, y=.fitted)) + 
+  geom_line() + 
+  geom_ribbon(alpha=.5,
+              aes(ymin=.fitted-.se.fit, 
+                  ymax=.fitted+.se.fit)) +
+  geom_label(x=1960, y=60,
+             label=beta)
+```
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/plot_lm1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+
+```r
+plot(lifeEx_year, which=1)
+```
+
+![](lme_rladies_london_files/figure-html/unnamed-chunk-4-1.png)&lt;!-- --&gt;
+]
+.pull-right[
+
+```r
+plot(lifeEx_year, which=2)
+```
+
+![](lme_rladies_london_files/figure-html/unnamed-chunk-5-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+
+```r
+gapminder_sub %&gt;% 
+  ggplot(aes(x=country, y=lifeExp)) + 
+  geom_boxplot() +
+  coord_flip()
+```
+
+By making boxplots for each country we can see data varies substantially across the countries. We should somehow be incorporating this information in our models. The previous diagnostic plots clearly indicate autocorrelation in our data, and we know this, because each subsequent observation for a country is correlated to the last observation.
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/box1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear models - adding a covariate
+.pull-left[
+
+```r
+lifeEx_year_c &lt;- lm(lifeExp ~ year + country, 
+                    data=gapminder_sub)
+
+tidy(lifeEx_year_c) %&gt;% 
+* knitr::kable(format="html",
+*              digits=3)
+```
+]
+
+.pull-right[
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -607.648 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.011 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -60.695 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; year &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.326 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.005 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 64.786 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryAlbania &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.954 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.154 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryAlgeria &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.551 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.728 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryAngola &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.405 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.277 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.782 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryArgentina &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 31.582 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.583 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryAustralia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 37.184 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.412 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryAustria &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 35.624 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.346 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBahrain &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 28.127 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.222 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBangladesh &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 12.355 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.444 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBelgium &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.163 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.714 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBenin &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.301 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.723 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBolivia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.026 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.269 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBosnia and Herzegovina &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.229 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.659 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBotswana &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 17.119 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.699 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBrazil &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.761 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.922 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBulgaria &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.265 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.050 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBurkina Faso &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.215 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.931 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryBurundi &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.339 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5.015 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCambodia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.424 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.124 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCameroon &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.650 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.278 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCanada &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 37.424 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.576 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCentral African Republic &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.388 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.366 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryChad &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.295 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.352 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryChile &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.952 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.470 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryChina &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.306 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.611 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryColombia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.419 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.055 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryComoros &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.903 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.185 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCongo, Dem. Rep. &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.065 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.828 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCongo, Rep. &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.023 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.267 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCosta Rica &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.703 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.349 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCote d'Ivoire &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.957 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.488 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCroatia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.577 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.264 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCuba &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 33.566 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.940 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryCzech Republic &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 34.032 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 23.258 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryDenmark &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.891 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.212 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryDjibouti &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.902 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.084 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryDominican Republic &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.076 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.454 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryEcuador &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.338 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 17.316 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryEgypt &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.764 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 12.824 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryEl Salvador &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.155 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.141 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryEquatorial Guinea &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5.481 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.746 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryEritrea &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.520 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5.823 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryEthiopia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.997 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.782 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryFinland &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 35.513 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.270 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryFrance &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.870 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.198 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGabon &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.742 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.391 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGambia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.922 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.730 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGermany &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 35.966 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.579 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGhana &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.862 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.157 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGreece &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.254 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.777 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGuatemala &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.251 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.156 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGuinea &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5.761 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.937 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryGuinea-Bissau &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.731 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.183 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.237 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryHaiti &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 12.686 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.670 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryHonduras &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.442 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.970 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryHong Kong, China &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.014 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.612 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryHungary &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 31.914 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.811 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryIceland &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 39.033 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.675 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryIndia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.687 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.721 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryIndonesia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.857 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.520 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryIran &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.158 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.460 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryIraq &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.103 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.055 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryIreland &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 35.538 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.287 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryIsrael &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.167 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.717 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryItaly &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.535 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.969 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryJamaica &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 31.271 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.371 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryJapan &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 37.348 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.524 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryJordan &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.308 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.245 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryKenya &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.202 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.389 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryKorea, Dem. Rep. &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.129 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 17.857 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryKorea, Rep. &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 27.522 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.809 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryKuwait &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 31.444 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.489 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryLebanon &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 28.387 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.400 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryLesotho &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 12.528 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.562 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryLiberia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.997 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.415 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.001 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryLibya &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.825 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.916 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMadagascar &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.292 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.034 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMalawi &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5.873 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.014 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMalaysia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.801 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.316 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMali &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5.935 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.056 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMauritania &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.823 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.130 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMauritius &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 27.474 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.776 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMexico &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 27.930 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.088 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMongolia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 18.412 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 12.583 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMontenegro &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.820 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.430 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMorocco &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.130 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.757 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMozambique &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 2.901 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.982 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.048 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryMyanmar &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.843 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.827 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNamibia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.013 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.943 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNepal &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.508 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.864 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNetherlands &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 38.170 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.086 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNew Zealand &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.511 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.952 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNicaragua &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.871 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.263 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNiger &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.080 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.838 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNigeria &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.103 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.171 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryNorway &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 38.364 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.219 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryOman &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.964 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.327 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryPakistan &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 17.403 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.894 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryPanama &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.323 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.723 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryParaguay &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.330 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.045 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryPeru &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.381 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.612 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryPhilippines &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 23.488 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.052 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryPoland &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.698 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.346 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryPortugal &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.941 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.512 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryPuerto Rico &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 35.261 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.098 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryReunion &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.165 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.932 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryRomania &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 30.812 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.057 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryRwanda &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4.003 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 2.736 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.006 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySao Tome and Principe &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.418 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.954 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySaudi Arabia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.200 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.488 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySenegal &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.147 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.985 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySerbia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 31.072 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 21.235 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySierra Leone &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.710 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.485 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.628 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySingapore &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 33.741 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 23.059 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySlovak Republic &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 33.217 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.701 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySlovenia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 34.122 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 23.319 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySomalia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.510 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 2.399 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.017 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySouth Africa &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.514 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.286 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySpain &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.725 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 25.098 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySri Lanka &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.047 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.851 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySudan &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.922 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.464 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySwaziland &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.524 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.875 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySweden &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 38.698 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.447 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySwitzerland &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 38.086 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 26.029 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countrySyria &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 23.867 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.311 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryTaiwan &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 32.858 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.456 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryTanzania &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.434 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.130 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryThailand &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.721 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 16.895 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryTogo &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 14.020 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.581 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryTrinidad and Tobago &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.349 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.058 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryTunisia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 23.242 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.884 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryTurkey &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.218 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.184 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryUganda &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.140 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.930 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryUnited Kingdom &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.444 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.906 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryUnited States &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 36.000 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 24.603 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryUruguay &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 33.303 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.760 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryVenezuela &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 29.102 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 19.889 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryVietnam &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 20.001 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 13.669 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryWest Bank and Gaza &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 22.850 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.616 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryYemen, Rep. &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.302 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.357 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryZambia &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 8.518 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5.821 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; countryZimbabwe &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 15.184 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.463 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.377 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+Adding a covariate is not helping our assumption violations. Neither will adding an interaction term. you can try it your self and see, the QQ-plot particularly looks maddeningly bad.
+
+We need to be handling the autocorrelation somehow. An alternative is to aggregate data across countries and use the aggregated data for analysis. But the is data reduction, and you will be loosing alot of power and cannot neatly account for the variability in the data.
+]
+
+.pull-right[
+
+```r
+plot(lifeEx_year_c, which=2)
+```
+
+![](lme_rladies_london_files/figure-html/unnamed-chunk-6-1.png)&lt;!-- --&gt;
+]
+
+
+---
+
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring linear mixed models
+
+---
+
+## Linear mixed models
+.pull-left[
+
+```r
+library(lme4)
+lifeEx_y_c &lt;- lmer(lifeExp ~ year + 
+                     (1|country), 
+                   data=gapminder_sub)
+```
+]
+
+.pull-right[
+In the package `lme4` a random effect (autororrelation specification)  is added with the formulaeic expression `(1|entity)`, which will fit an independent intercept per entity. In this case, our entity is country. 
+
+You may also use the package `nlme` for linear mixed models, but you specify the random effect differently. 
+]
+
+
+```r
+broom::tidy(lifeEx_y_c) %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -585.6521874 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.0016658 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -58.55546 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; year &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.3259038 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0050305 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 64.78581 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).country &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 11.0971564 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.5841962 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+
+```r
+plot(lifeEx_y_c, which=1)
+```
+
+With LMEs we no longer get QQ plots to inspect, as they are not necessary. But a fitted again residuals you may still instpect. You should see more or less random dot distribution and a completely straight line across 0. This plot looks pretty nice, though there is a downward tail that is not ideal. 
+
+There is still something in the data we are not accounting for. Countries are nested within continents, and perhaps specifying this will help. There might be continental trends that might help our model work better, and also we can utilise partial pooling, as the intercepts of countries within continents will be shrunk towards the continent estimate. This increases our degrees of freedom.
+]
+.pull-right[
+![](lme_rladies_london_files/figure-html/resid-1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - random intercepts
+Let's first just try _just_ adding continent as a random effect. This will **not** nest the countries within continent, and we will not get parital pooling. We ignore the hierarchical structure of the data, but would like to see if this makes any difference to our model. 
+
+
+```r
+lifeEx_y_cc &lt;- lmer(lifeExp ~ year + 
+                      (1|country) + (1|continent), data=gapminder_sub)
+
+broom::tidy(lifeEx_y_cc) %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -581.5462217 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.9353229 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -53.18053 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; year &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.3259038 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0050305 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 64.78573 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).country &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.4822035 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.8648549 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.5842007 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+
+```r
+plot(lifeEx_y_cc, which=1)
+```
+]
+.pull-right[
+![](lme_rladies_london_files/figure-html/resid-2-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - random intercepts
+
+
+```r
+lifeEx_y_ccn &lt;- lmer(lifeExp ~ year + (1|continent/country), data=gapminder_sub)
+
+broom::tidy(lifeEx_y_ccn) %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -581.5462217 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.9353229 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -53.18053 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; year &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.3259038 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0050305 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 64.78573 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).country:continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6.4822035 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country:continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.8648549 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.5842007 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+
+```r
+plot(lifeEx_y_ccn, which=1)
+```
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/resid-3-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixed models - random intercepts
+When comparing models, which is the real advantage when using mixed models, and the likelihood function it uses, we want to find the model with lowest AIC and/or BIC, but also to keep in mind what model best formulates the known structure of the data.
+
+In this case, all models are performing more or less equally, and so we will keep with the nested model, which preserves more of the data structure.
+
+
+```r
+anova(lifeEx_y_c, 
+      lifeEx_y_cc, 
+      lifeEx_y_ccn) %&gt;% 
+  tidy() %&gt;% 
+* knitr::kable(format="html")
+```
+
+```
+## refitting model(s) with ML (instead of REML)
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; AIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; BIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; logLik &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; deviance &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; Chi.Df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_c &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9867.217 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9888.980 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4929.609 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9859.217 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_cc &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9737.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9765.057 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4863.926 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9727.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 131.3642 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_ccn &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9737.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9765.057 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4863.926 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9727.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0000 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+---
+
+## Linear mixed models - random intercepts
+.pull-left[
+Lets have a look at our fit. Make a data.frame with the variable of interest, `year`, spanning the time to predict in and run a prediction to get the fits. We also add a standard linear smooth and see if that is different.
+
+
+```r
+predict_data &lt;- data.frame(
+  year = seq(min(gapminder_sub$year), 
+             max(gapminder_sub$year))
+)
+predict_data$fit = predict(lifeEx_y_ccn, 
+                           newdata=predict_data, 
+                           re.form=NA)
+ggplot(gapminder_sub, 
+       aes(x=year, y=lifeExp)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method="lm") +
+  geom_line(data=predict_data,
+            colour="forestgreen",
+            aes(y=fit))
+```
+]
+
+.pull-right[
+![](lme_rladies_london_files/figure-html/pred1-out-1.png)&lt;!-- --&gt;
+]
+
+---
+
+## Linear mixel models - random slopes
+.pull-left[
+Now, we have been fitting just random intercepts. There is also here the possibility of fitting random slopes too, meaning we allow countries to have different trajecotries in life expectancy over time. Which we know is part of the data.
+
+
+```r
+lifeEx_y_s &lt;- lmer(lifeExp ~ year + 
+                     (year|country),
+                   data=gapminder_sub)
+```
+
+```
+## Warning in checkConv(attr(opt, "derivs"), opt$par, ctrl =
+## control$checkConv, : unable to evaluate scaled gradient
+```
+
+```
+## Warning in checkConv(attr(opt, "derivs"), opt$par, ctrl =
+## control$checkConv, : Model failed to converge: degenerate Hessian with 2
+## negative eigenvalues
+```
+]
+
+
+---
+
+## Linear mixel models - random slopes
+
+.pull-left[
+
+```r
+plot(lifeEx_y_s, which = 1)
+```
+
+![](lme_rladies_london_files/figure-html/unnamed-chunk-12-1.png)&lt;!-- --&gt;
+]
+
+.pull-right[
+
+```r
+lifeEx_y_s %&gt;% 
+  tidy() %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -585.6521875 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9.9843672 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -58.65692 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; year &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.3259038 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0050529 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 64.49777 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).country &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.1587220 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_year.country &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0039770 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; cor_(Intercept).year.country &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.9920753 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.5923415 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+---
+
+## Linear mixel models - random slopes
+.pull-left[
+
+```r
+lifeEx_y_sn &lt;- lmer(lifeExp ~ year + 
+                      (year|continent/country),
+                    data=gapminder_sub)
+```
+
+```
+## boundary (singular) fit: see ?isSingular
+```
+]
+
+.pull-right[
+
+```r
+lifeEx_y_sn %&gt;% 
+  tidy() %&gt;% 
+* knitr::kable(format="html")
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; estimate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; std.error &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; group &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; (Intercept) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -586.6625468 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 10.661164 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -55.0280015 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; year &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.3287114 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1.645765 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.1997317 &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; fixed &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).country:continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.1248239 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country:continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_year.country:continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0048827 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country:continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; cor_(Intercept).year.country:continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.9985177 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; country:continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_(Intercept).continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 7.9815421 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_year.continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.6800242 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; cor_(Intercept).year.continent &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0024940 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; continent &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; sd_Observation.Residual &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3.5452638 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; Residual &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+---
+
+## Linear mixed models - comparing all models
+.pull-left[
+
+```r
+anova(lifeEx_y_c, 
+      lifeEx_y_cc, 
+      lifeEx_y_ccn,
+      lifeEx_y_s,
+      lifeEx_y_sn) %&gt;% 
+  tidy() %&gt;% 
+* knitr::kable(format="html")
+```
+]
+
+.pull-right[
+If we compare all models we have tried, they all seem to be performing more or less the same. As such, it is up to us to pick the model which best reflects the structure of the underlying data. In this case, as both models with random slopes threw a type of convergence warning, i would stick to the one with neste intercepts alone.
+]
+
+
+```
+## refitting model(s) with ML (instead of REML)
+```
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; term &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; AIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; BIC &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; logLik &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; deviance &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; statistic &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; Chi.Df &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; p.value &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_c &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 4 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9867.217 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9888.980 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4929.609 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9859.217 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; NA &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_cc &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9737.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9765.057 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4863.926 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9727.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 131.3642 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_ccn &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 5 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9737.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9765.057 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4863.926 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9727.853 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0000 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_s &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 6 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9875.792 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9908.436 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4931.896 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9863.792 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.0000 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; lifeEx_y_sn &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9768.224 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9817.191 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -4875.112 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 9750.224 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 113.5674 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 3 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+---
+
+## Playing with another dataset
+
+Get data from Gabriela Hadjuk's post om [linear mixed models](https://gkhajduk.github.io/2017-03-09-mixed-models/)
+
+Get data at: http://gkhajduk.d.pr/9GPn/3nbbPoK6
+
+---
+# More resources on LMM's 
+
+### - Julia Pilowski's [practical guide](https://www.juliapilowsky.com/2018/10/19/a-practical-guide-to-mixed-models-in-r/)  
+### - Bodo Winters' [tutorials and data](http://www.bodowinter.com/tutorials.html)
+### - Jared Knowles' [getting started](https://www.jaredknowles.com/journal/2013/11/25/getting-started-with-mixed-effect-models-in-r)
+### - B. Bolker's [mixed models in R](https://rpubs.com/bbolker/3336)
+### - Gabriela Hadjuk's [introduction](https://gkhajduk.github.io/2017-03-09-mixed-models/)
+
+---
+class: center 
+
+# Shameless self-promotion
+
+&lt;img src="lme_rladies_london_files/Screenshot-2019-03-26-at-16.41.58.png" width="80%" /&gt;
+
+### [drmowinckels.io](https://drmowinckels.io)
+    </textarea>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false,
+"ratio": "16:9"
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function() {
+  var d = document, s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})();</script>
+
+<script>
+(function() {
+  var i, text, code, codes = document.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+})();
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

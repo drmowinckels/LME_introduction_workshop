@@ -1,0 +1,612 @@
+---
+title: "Linear mixed models in R"
+subtitle: "- consepts - execution - inspection -"
+author: "Athanasia Monika Mowinckel"
+date: "March 28^th^ 2019"
+output:
+  xaringan::moon_reader:
+    css: [lcbc-uio.css, lcbc-uio-fonts.css, default]
+    lib_dir: libs
+    nature:
+      titleSlideClass: [middle, right]
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false 
+      ratio: "16:9"
+---
+
+layout: true
+
+<div class="my-sidebar"></div> 
+
+---
+
+```{r setup, include=FALSE}
+# Here you can place global options for the entire document.
+# Mostly used for knitr settings, but can also load data etc.
+# Whatever happens here will not show in the presentation.
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(lme4)
+
+```
+
+# Linear mixed models - why?
+
+.pull-left[
+In statistics we are usually taught only to do linear regressions, like t-tests and anova. 
+These are good options when you have single observations per entity, and entity can for instance be a person or a location. 
+If you have repeated observations from the same entity, or there is some hierarchical structure to your data in a way, i.e. your dependent obsverations correlate in some way, a linear mixed model might suit your needs more. 
+]
+
+.pull-right[
+Mixed models have many names, like our favourite pets:  
+
+- hierarchical models  
+- linear mixed models 
+- linear mixed effects  
+- multi-level models  
+
+When searching for information on mixed models, try all these terms, they will give you good coverage of the subject. These terms are not completely synonymous to eachother, but searches on these will help you identify what model applies to your data.
+]
+
+
+---
+
+# Linear mixed models - why?
+.pull-left[
+**Linear models**   
+
+- Homoscedastic (equal variances)  
+
+- No autocorrelation  
+
+- Resudials should be normally distributed  
+]
+
+.pull-right[
+**Linear mixed models**  
+
+- Handles autocorrelation through _random_ terms  
+
+- Handles heteroscedasticity through _random_ terms  
+
+- Residuals need not be normally distributed  
+
+- When _linear model_ assumptions are met, generally gives same results in large data sets  
+]
+
+---
+class: dark, center, middle
+
+# Get started
+## Inspecting the data
+
+---
+
+# Getting started
+
+Let's dig into it. We will be using the gapminder_sub data for this, as it is already nicely cleaned and in a format that is very well suited for LME's, long format.
+
+
+```{r}
+gapminder_sub <- gapminder::gapminder 
+
+gapminder_sub
+```
+
+---
+
+# Getting started
+
+## Hierarchical, long data
+
+.pull-left[
+Long-format data is where an entity has as many rows of data as observations. As you see in the top part of the data, each country as one row of data per year of measurement. `gapminder_sub` is a great dataset for this workshop because it has a nice hierarchy, we do not only have countries, but countries are nested within continents. This information is something we should use as we are building our models. 
+
+As always, we should get to know our data a little before we start. Let's make some plots.
+]
+
+.pull-right[
+```{r echo=F, fig.cap="source: https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png"}
+knitr::include_graphics("https://neilpatel-qvjnwj7eutn3.netdna-ssl.com/wp-content/uploads/2014/08/2-site-breakdown.png")
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r dist1, eval=F, message=FALSE, warning = FALSE}
+library(tidyverse)
+gapminder_sub %>% 
+  ggplot(aes(x=lifeExp, 
+             colour=continent)) + 
+  geom_density()
+```
+
+> checking the distribution of the data to understand what is looks like across natural groups in the data
+
+]
+
+.pull-right[
+```{r dist1-out, echo=F, ref.label="dist1", message=FALSE, warning = FALSE}
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r lifeexp1, eval=F}
+gapminder_sub %>% 
+  filter(year == min(year)) %>% 
+  arrange(lifeExp) %>% 
+  mutate(
+    country = fct_inorder(unique(
+      as.character(country)
+    ))
+  ) %>%
+  
+  ggplot(aes(x=country, y=lifeExp, 
+             fill=continent, 
+             colour=continent)) +
+  geom_histogram(stat="identity") +
+  coord_flip() 
+```
+
+> checking the distribution of the data to understand what is looks like across natural groups in the data
+]
+
+.pull-right[
+```{r lifeexp1-out, echo=F, ref.label="lifeexp1", warning=F}
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r plot_smooths, eval = F} 
+gapminder_sub %>% 
+  ggplot(aes(x=year, y=lifeExp)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method = "lm", colour="black") 
+```
+]
+
+.pull-right[
+```{r plot_smooths-out, ref.label="plot_smooths", echo=F, warning=F}
+```
+]
+
+---
+
+## Inspecting the data
+.pull-left[
+```{r plot_smooths1, eval = F} 
+gapminder_sub %>% 
+  ggplot(aes(x=year, y=lifeExp)) + 
+  geom_jitter(alpha=.2) +
+  geom_line(show.legend = FALSE, #<<
+            aes(group = country, #<< 
+                colour = country)) + #<<
+  geom_smooth(method = "lm", colour="black") 
+```
+]
+
+.pull-right[
+```{r plot_smooths1-out, ref.label="plot_smooths1", echo=F, warning=F}
+```
+]
+
+---
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring standard linear models
+
+---
+
+## Some R-syntax information - formula
+.pull-left[
+Running models in R, we use something we call a `formula`. This is basically an unquoted expression of your model specification. 
+
+If you want to predict life expentancy by the year of measurement, the corresponding formula would be
+
+`lifeExp ~ year`
+
+What is on the left-side of the tilde (`~`) is your dependent variable, and on the right you place you predictors. 
+]
+.pull-right[
+Main effects are added on using `+`. Here predicting life expectancy, with year and country as main effects.
+
+`lifeExp ~ year + country`
+
+Interactions are specified with `:`, here predicting life expectansy only by the interaction of year and country.
+
+`lifeExp ~ year:country`
+
+A 'full factorial', a complete mains + interactions can be done as such:
+
+`lifeExp ~ year + country + year:country`
+
+or the shorthand with an asteri (`*`):
+
+`lifeExp ~ year * country`
+]
+
+---
+
+## Linear models - running a simple model
+.pull-left[
+```{r tab-lm1, eval=F}
+library(broom)
+lifeEx_year <- lm(lifeExp ~ year, 
+                  data=gapminder_sub)
+
+tidy(lifeEx_year) %>% 
+  knitr::kable(format="html", #<<
+               digits=3) #<<
+```
+
+From here on highlighted code means code you can ignore, it is just there to make the slides prettier.
+]
+
+.pull-right[
+```{r tab-lm1-out, ref.label="tab-lm1", echo=F, warning=F}
+```
+]
+
+--
+<div style="text-align: center">
+```{r echo=F, out.width="30%", fig.cap="source: https://assets.rbl.ms/14068114/980x.jpg"}
+knitr::include_graphics("https://assets.rbl.ms/14068114/980x.jpg")
+```
+</div>
+
+---
+
+## Linear models - plot the regression
+
+.pull-left[
+```{r plot_lm1, eval=F}
+lifeEx_year_fit <- augment(lifeEx_year)
+beta <- paste0("beta = ", 
+               round(
+                 lifeEx_year$coefficients[2],2
+               ))
+
+lifeEx_year_fit %>% 
+  ggplot(aes(x=year, y=.fitted)) + 
+  geom_line() + 
+  geom_ribbon(alpha=.5,
+              aes(ymin=.fitted-.se.fit, 
+                  ymax=.fitted+.se.fit)) +
+  geom_label(x=1960, y=60,
+             label=beta)
+```
+]
+
+.pull-right[
+```{r plot_lm1-out, ref.label="plot_lm1", echo=F, warning=F, message=F}
+```
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+```{r}
+plot(lifeEx_year, which=1)
+```
+]
+.pull-right[
+```{r}
+plot(lifeEx_year, which=2)
+```
+]
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+```{r box1, eval=F}
+gapminder_sub %>% 
+  ggplot(aes(x=country, y=lifeExp)) + 
+  geom_boxplot() +
+  coord_flip()
+```
+
+By making boxplots for each country we can see data varies substantially across the countries. We should somehow be incorporating this information in our models. The previous diagnostic plots clearly indicate autocorrelation in our data, and we know this, because each subsequent observation for a country is correlated to the last observation.
+]
+
+.pull-right[
+```{r box1-out, ref.label="box1", echo=F, warning=F, message=F}
+```
+]
+
+---
+
+## Linear models - adding a covariate
+.pull-left[
+```{r tab-lm2, eval=F}
+lifeEx_year_c <- lm(lifeExp ~ year + country, 
+                    data=gapminder_sub)
+
+tidy(lifeEx_year_c) %>% 
+  knitr::kable(format="html", #<<
+               digits=3) #<<
+```
+]
+
+.pull-right[
+```{r tab-lm2-out, ref.label="tab-lm2", echo=F, warning=F}
+```
+]
+
+
+---
+
+## Linear models - checking assumption violations
+
+.pull-left[
+Adding a covariate is not helping our assumption violations. Neither will adding an interaction term. you can try it your self and see, the QQ-plot particularly looks maddeningly bad.
+
+We need to be handling the autocorrelation somehow. An alternative is to aggregate data across countries and use the aggregated data for analysis. But the is data reduction, and you will be loosing alot of power and cannot neatly account for the variability in the data.
+]
+
+.pull-right[
+```{r}
+plot(lifeEx_year_c, which=2)
+```
+]
+
+
+---
+
+class: dark, middle, center
+
+# Let's do some modelling!
+## Exploring linear mixed models
+
+---
+
+## Linear mixed models
+.pull-left[
+```{r}
+library(lme4)
+lifeEx_y_c <- lmer(lifeExp ~ year + 
+                     (1|country), 
+                   data=gapminder_sub)
+```
+]
+
+.pull-right[
+In the package `lme4` a random effect (autororrelation specification)  is added with the formulaeic expression `(1|entity)`, which will fit an independent intercept per entity. In this case, our entity is country. 
+
+You may also use the package `nlme` for linear mixed models, but you specify the random effect differently. 
+]
+
+```{r}
+broom::tidy(lifeEx_y_c) %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+```{r resid-1, eval=F} 
+plot(lifeEx_y_c, which=1)
+```
+
+With LMEs we no longer get QQ plots to inspect, as they are not necessary. But a fitted again residuals you may still instpect. You should see more or less random dot distribution and a completely straight line across 0. This plot looks pretty nice, though there is a downward tail that is not ideal. 
+
+There is still something in the data we are not accounting for. Countries are nested within continents, and perhaps specifying this will help. There might be continental trends that might help our model work better, and also we can utilise partial pooling, as the intercepts of countries within continents will be shrunk towards the continent estimate. This increases our degrees of freedom.
+]
+.pull-right[
+```{r resid-1-out, ref.label="resid-1", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear mixed models - random intercepts
+Let's first just try _just_ adding continent as a random effect. This will **not** nest the countries within continent, and we will not get parital pooling. We ignore the hierarchical structure of the data, but would like to see if this makes any difference to our model. 
+
+```{r}
+lifeEx_y_cc <- lmer(lifeExp ~ year + 
+                      (1|country) + (1|continent), data=gapminder_sub)
+
+broom::tidy(lifeEx_y_cc) %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+```{r resid-2, eval=F} 
+plot(lifeEx_y_cc, which=1)
+```
+]
+.pull-right[
+```{r resid-2-out, ref.label="resid-2", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear mixed models - random intercepts
+
+```{r}
+lifeEx_y_ccn <- lmer(lifeExp ~ year + (1|continent/country), data=gapminder_sub)
+
+broom::tidy(lifeEx_y_ccn) %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - inspecting residuals
+.pull-left[
+```{r resid-3, eval=F} 
+plot(lifeEx_y_ccn, which=1)
+```
+]
+
+.pull-right[
+```{r resid-3-out, ref.label="resid-2", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear mixed models - random intercepts
+When comparing models, which is the real advantage when using mixed models, and the likelihood function it uses, we want to find the model with lowest AIC and/or BIC, but also to keep in mind what model best formulates the known structure of the data.
+
+In this case, all models are performing more or less equally, and so we will keep with the nested model, which preserves more of the data structure.
+
+```{r warning=FALSE}
+anova(lifeEx_y_c, 
+      lifeEx_y_cc, 
+      lifeEx_y_ccn) %>% 
+  tidy() %>% 
+  knitr::kable(format="html") #<<
+```
+
+---
+
+## Linear mixed models - random intercepts
+.pull-left[
+Lets have a look at our fit. Make a data.frame with the variable of interest, `year`, spanning the time to predict in and run a prediction to get the fits. We also add a standard linear smooth and see if that is different.
+
+```{r pred1, eval=F}
+predict_data <- data.frame(
+  year = seq(min(gapminder_sub$year), 
+             max(gapminder_sub$year))
+)
+predict_data$fit = predict(lifeEx_y_ccn, 
+                           newdata=predict_data, 
+                           re.form=NA)
+ggplot(gapminder_sub, 
+       aes(x=year, y=lifeExp)) + 
+  geom_jitter(alpha=.2) +
+  geom_smooth(method="lm") +
+  geom_line(data=predict_data,
+            colour="forestgreen",
+            aes(y=fit))
+```
+]
+
+.pull-right[
+```{r pred1-out, ref.label="pred1", echo=F, warning=F}
+```
+]
+
+---
+
+## Linear mixel models - random slopes
+.pull-left[
+Now, we have been fitting just random intercepts. There is also here the possibility of fitting random slopes too, meaning we allow countries to have different trajecotries in life expectancy over time. Which we know is part of the data.
+
+```{r slope1,  warning=T}
+lifeEx_y_s <- lmer(lifeExp ~ year + 
+                     (year|country),
+                   data=gapminder_sub)
+```
+]
+
+
+---
+
+## Linear mixel models - random slopes
+
+.pull-left[
+```{r }
+plot(lifeEx_y_s, which = 1)
+
+```
+]
+
+.pull-right[
+```{r}
+lifeEx_y_s %>% 
+  tidy() %>% 
+  knitr::kable(format="html") #<<
+```
+]
+
+---
+
+## Linear mixel models - random slopes
+.pull-left[
+```{r , warning=T}
+lifeEx_y_sn <- lmer(lifeExp ~ year + 
+                      (year|continent/country),
+                    data=gapminder_sub)
+
+```
+]
+
+.pull-right[
+```{r}
+lifeEx_y_sn %>% 
+  tidy() %>% 
+  knitr::kable(format="html") #<<
+```
+]
+
+---
+
+## Linear mixed models - comparing all models
+.pull-left[
+```{r fulltab, eval=F, warning=FALSE}
+anova(lifeEx_y_c, 
+      lifeEx_y_cc, 
+      lifeEx_y_ccn,
+      lifeEx_y_s,
+      lifeEx_y_sn) %>% 
+  tidy() %>% 
+  knitr::kable(format="html") #<<
+```
+]
+
+.pull-right[
+If we compare all models we have tried, they all seem to be performing more or less the same. As such, it is up to us to pick the model which best reflects the structure of the underlying data. In this case, as both models with random slopes threw a type of convergence warning, i would stick to the one with neste intercepts alone.
+]
+
+```{r fulltab-out, ref.label="fulltab", echo=F}
+```
+---
+
+## Playing with another dataset
+
+Get data from Gabriela Hadjuk's post om [linear mixed models](https://gkhajduk.github.io/2017-03-09-mixed-models/)
+
+Get data at: http://gkhajduk.d.pr/9GPn/3nbbPoK6
+
+---
+# More resources on LMM's 
+
+### - Julia Pilowski's [practical guide](https://www.juliapilowsky.com/2018/10/19/a-practical-guide-to-mixed-models-in-r/)  
+### - Bodo Winters' [tutorials and data](http://www.bodowinter.com/tutorials.html)
+### - Jared Knowles' [getting started](https://www.jaredknowles.com/journal/2013/11/25/getting-started-with-mixed-effect-models-in-r)
+### - B. Bolker's [mixed models in R](https://rpubs.com/bbolker/3336)
+### - Gabriela Hadjuk's [introduction](https://gkhajduk.github.io/2017-03-09-mixed-models/)
+
+---
+class: center 
+
+# Shameless self-promotion
+
+```{r out.width="80%", echo=F}
+knitr::include_graphics("lme_rladies_london_files/Screenshot-2019-03-26-at-16.41.58.png")
+```
+
+### [drmowinckels.io](https://drmowinckels.io)
+
+
+
