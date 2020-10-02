@@ -15,7 +15,7 @@ knitr::opts_chunk$set(
 ```
 # Linear Mixed Models workshop 
 
-Please visit the [workshop website]((https://athanasiamo.github.io/LME_introduction_workshop/) for information about workshop preparations, slides and more.
+Please visit the [workshop website](https://athanasiamo.github.io/LME_introduction_workshop/) for information about workshop preparations, slides and more.
 
 ## Code of Conduct
 

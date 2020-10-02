@@ -9,13 +9,13 @@ maturing](https://img.shields.io/badge/lifecycle-maturing-blue.svg)](https://www
 
 # Linear Mixed Models workshop
 
-Please visit the \[workshop
-website\]((<https://athanasiamo.github.io/LME_introduction_workshop/>)
-for information about workshop preparations, slides and more.
+Please visit the [workshop
+website](https://athanasiamo.github.io/LME_introduction_workshop/) for
+information about workshop preparations, slides and more.
 
 ## Code of Conduct
 
-Please note that the LME\_introduction\_workshop project is released
+Please note that the LME\_introduction\_workshop workshop is released
 with a [Contributor Code of
 Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html).
 By contributing to this project, you agree to abide by its terms.
