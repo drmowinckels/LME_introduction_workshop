@@ -88,17 +88,18 @@ background-size: cover
 # Getting started
 
 
-
 .pull-left[
+
+```r
+library(tidyverse)
+```
 
 
 ```r
-library(tidyverse, quietly = T)
-dragons &lt;- as_tibble(dragons)
+url &lt;- "https://raw.githubusercontent.com/Athanasiamo/LME_introduction_workshop/master/data-raw/dragons.tsv"
+download.file(url, "dragons.tsv")
+dragons &lt;- read_tsv("dragons.tsv")
 ```
-]
-
-.pull-right[
 ]
 
 ???
@@ -327,26 +328,6 @@ This means there is something important in the data we are not accounting for.
 
 ---
 
-## Inspecting the data
-.pull-left[
-
-```r
-dragons %&gt;% 
-  ggplot(aes(x=testScore, fill=mountainRange)) + 
-  geom_density(alpha=.5)
-```
-
-&gt; checking the distribution of the data to understand what is looks like across natural groups in the data
-
-]
-
-.pull-right[
-&lt;img src="lme_UseR_Oslo_2019_files/figure-html/dist2-out-1.png" width="100%" /&gt;
-]
-
----
-
-
 ## Linear models - checking assumption violations
 
 .pull-left[
@@ -368,28 +349,6 @@ dragons %&gt;%
 ???
 By making boxplots for each mountain range we can see data varies substantially across these. We should somehow be incorporating this information in our models. The previous diagnostic plots clearly indicate autocorrelation in our data, and we know this, because each subsequent observation for a mountain range is correlated to the last observation.
 
----
-
-## Inspecting the data
-.pull-left[
-
-```r
-dragons %&gt;% 
-  ggplot(aes(x=bodyLength, 
-             y=testScore,
-*            group = mountainRange,
-             colour = mountainRange)) + 
-  geom_jitter(alpha=.2) +
-  geom_smooth(method = "lm") 
-```
-]
-
-.pull-right[
-&lt;img src="lme_UseR_Oslo_2019_files/figure-html/plot_smooths1-out-1.png" width="100%" /&gt;
-]
-
-???
-
 - If we split the data up into the different mountain ranges, we can see there is great variation in the intelligence and size of the dragons in the different mountain ranges.  
 - Our model should account for this variability when trying to see if there is a true relationship between the length and intelligence of a dragon.    
 
@@ -398,7 +357,7 @@ dragons %&gt;%
 class: dark, middle
 ## **TASK:** Try adding an interaction term between bodyLength and mountainRange. See if the assumption violations are improved by this.
 
-<div class="countdown" id="timer_5f76ddf0" style="top:52%;right:1em;left:1em;margin:10%;padding:50px;font-size:4em;" data-audio="true" data-warnwhen="30">
+<div class="countdown" id="timer_5f76e011" style="top:52%;right:1em;left:1em;margin:10%;padding:50px;font-size:4em;" data-audio="true" data-warnwhen="30">
 <code class="countdown-time"><span class="countdown-digits minutes">05</span><span class="countdown-digits colon">:</span><span class="countdown-digits seconds">00</span></code>
 </div>
 
@@ -948,7 +907,7 @@ class: dark, middle
 ## Run the "null" model, check the QQ-plot, and add it to the model comparisons.  
 **HINT:** Formula to just calculate the intercept for a model (the null) is `y ~ 1 + (1|entity)`   
 
-<div class="countdown" id="timer_5f76ddcd" style="top:52%;right:1em;left:1em;" data-audio="true" data-warnwhen="30">
+<div class="countdown" id="timer_5f76dfc6" style="top:52%;right:1em;left:1em;" data-audio="true" data-warnwhen="30">
 <code class="countdown-time"><span class="countdown-digits minutes">05</span><span class="countdown-digits colon">:</span><span class="countdown-digits seconds">00</span></code>
 </div>
 

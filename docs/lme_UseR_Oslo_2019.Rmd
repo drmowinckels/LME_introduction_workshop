@@ -99,18 +99,16 @@ background-size: cover
 # Getting started
 
 
-
 .pull-left[
-```{r eval=F}
-
-```
 ```{r}
-library(tidyverse, quietly = T)
-dragons <- as_tibble(dragons)
+library(tidyverse)
 ```
-]
 
-.pull-right[
+```{r eval=F}
+url <- "https://raw.githubusercontent.com/Athanasiamo/LME_introduction_workshop/master/data-raw/dragons.tsv"
+download.file(url, "dragons.tsv")
+dragons <- read_tsv("dragons.tsv")
+```
 ]
 
 ???
@@ -317,26 +315,6 @@ This means there is something important in the data we are not accounting for.
 
 ---
 
-## Inspecting the data
-.pull-left[
-```{r dist2, eval=F, message=FALSE, warning = FALSE}
-dragons %>% 
-  ggplot(aes(x=testScore, fill=mountainRange)) + 
-  geom_density(alpha=.5)
-```
-
-> checking the distribution of the data to understand what is looks like across natural groups in the data
-
-]
-
-.pull-right[
-```{r dist2-out, echo=F, ref.label="dist2", message=FALSE, warning = FALSE}
-```
-]
-
----
-
-
 ## Linear models - checking assumption violations
 
 .pull-left[
@@ -357,28 +335,6 @@ dragons %>%
 
 ???
 By making boxplots for each mountain range we can see data varies substantially across these. We should somehow be incorporating this information in our models. The previous diagnostic plots clearly indicate autocorrelation in our data, and we know this, because each subsequent observation for a mountain range is correlated to the last observation.
-
----
-
-## Inspecting the data
-.pull-left[
-```{r plot_smooths1, eval = F} 
-dragons %>% 
-  ggplot(aes(x=bodyLength, 
-             y=testScore,
-             group = mountainRange, #<< 
-             colour = mountainRange)) + 
-  geom_jitter(alpha=.2) +
-  geom_smooth(method = "lm") 
-```
-]
-
-.pull-right[
-```{r plot_smooths1-out, ref.label="plot_smooths1", echo=F, warning=F}
-```
-]
-
-???
 
 - If we split the data up into the different mountain ranges, we can see there is great variation in the intelligence and size of the dragons in the different mountain ranges.  
 - Our model should account for this variability when trying to see if there is a true relationship between the length and intelligence of a dragon.    
