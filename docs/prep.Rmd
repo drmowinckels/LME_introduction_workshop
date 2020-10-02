@@ -1,0 +1,42 @@
+---
+title: "Workshop preparations"
+description: |
+  Instructions on preparations to be made by learners before the workshop
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+## Recommended setup
+This workshop is a combination of presentation and live coding.
+If you are attending it as a webinar, having a dual monitor set-up is recommended. 
+This would enable you to follow the live coding, by also typing in the commands and experience the effects your self.
+Programming is a skill where you learn best by doing.
+
+## Install R
+Make sure to have R installed on your computer.
+It is recommended that you have a newer version of R installed, preferably higher than 4.0.0, but at minimum higher than 3.5.3.
+Download R from [the R-project](https://www.r-project.org/)
+
+#### Windows computers
+The tidyverse packages require [rtools](https://cran.r-project.org/bin/windows/Rtools/) to be installed. 
+Make sure to have the required version installed before proceeding.
+
+## Install RStudio
+
+The best experience with the workshop is to have an RStudio newer than 1.3. 
+It is not necessary, but highly recommended.
+
+[RStudio downloads page](https://rstudio.com/products/rstudio/download/#download)
+
+## Required packages
+
+The course will use four packages, so please have these installed prior to the course beginning.
+
+```{r, eval = FALSE}
+install.packages(c("lme4", "tidyverse", "broom", "broom.mixed"))
+```
+
+If you are struggling to install the package, please create [a ticket](https://github.com/Athanasiamo/LME_introduction_workshop/issues) pasting the command and output you get so I can help you get it sorted.

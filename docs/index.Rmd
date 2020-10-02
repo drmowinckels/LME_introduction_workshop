@@ -1,10 +1,26 @@
 ---
-title: "Slides for my LME workshops"
-author: "Athanasia Monika Mowinckel"
-output: html_document
+title: "LME workshop"
+description: |
+  Welcome to the website. I hope you enjoy it!
+site: distill::distill_website
+author:
+  - name: Athanasia Monika Mowinckel
+    affiliation: "<a href='https://www.oslobrains.no'>Center for Lifespan Changes in Brain and Cognition</a>, University of Oslo, Norway"
 ---
 
-Here you can find the slides I use for my workshops. I slowly adapt my workshop every time I teach it, using the experience from each to improve it (I hope).  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
 
-- March 2019: [RLadies London](lme_rladies_london.html)  
-- June 2019: [useR! Oslo](lme_UseR_Oslo_2019.html)  
+# Learn more about creating websites with Distill at:
+# https://rstudio.github.io/distill/website.html
+
+```
+
+This workshop is an introductory workshop in Linear Mixed Models in R.
+
+It will cover some basic information on how to identify if a data-set is ill-suited for standard linear models, and mixed models are better.
+
+After this it covers how to specify linear mixed models, inspect the model output, and create tables and figures based on the model results. 
+
+The `dragons` data set used in this workshop is shamelessly stolen from [Gabriela Hajduk's introduction to LME's.](https://gkhajduk.github.io/2017-03-09-mixed-models/)
+Her excellent tutorial is highly recommend, which I also have somewhat adapted my own workshop.

@@ -7,3 +7,5 @@ LME_introduction_workshop.Rproj
 ^LICENSE\.md$
 ^\.github$
 ^CODE_OF_CONDUCT\.md$
+^.*\.Rproj$
+^\.Rproj\.user$

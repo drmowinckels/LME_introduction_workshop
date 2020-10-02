@@ -1,0 +1,18 @@
+name: "docs"
+title: "LME workshop"
+description: |
+  Introductory workshop in Linear Mixed Models in R.
+output_dir: "."
+navbar:
+  right:
+    - text: "Home"
+      href: index.html
+    - text: "Workshop preparations"
+      href: prep.html
+    - text: "Slides"
+      menu:
+        - text: "R-Ladies London (v.1.0)"
+          href: slides/lme_rladies_london.html
+        - text: "UseR Oslo & R-Ladies Bergen (v.1.1)"
+          href: slides/lme_UseR_Oslo_2019.html
+output: distill::distill_article
