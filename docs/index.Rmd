@@ -1,7 +1,7 @@
 ---
 title: "LME workshop"
 description: |
-  Welcome to the website. I hope you enjoy it!
+  Website for an introductory workshop in Linear Mixed Models in R
 site: distill::distill_website
 author:
   - name: Athanasia Monika Mowinckel
