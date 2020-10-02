@@ -2,7 +2,10 @@
 output: github_document
 ---
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
+<!-- badges: start -->
+[![R build status](https://github.com/Athanasiamo/LME_introduction_workshop/workflows/R-CMD-check/badge.svg)](https://github.com/Athanasiamo/LME_introduction_workshop/actions)
+[![Lifecycle: maturing](https://img.shields.io/badge/lifecycle-maturing-blue.svg)](https://www.tidyverse.org/lifecycle/#maturing)
+<!-- badges: end -->
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
@@ -19,3 +22,7 @@ She has an excellent tutorial that I highly recommend, on which I also have some
 
 The Rmarkdown files used to make the slides can be found in the `docs` folder, and the finished rendered slides may be found on this repos associated [github pages](https://athanasiamo.github.io/LME_introduction_workshop/).
  
+ 
+## Code of Conduct
+
+Please note that the LME_introduction_workshop project is released with a [Contributor Code of Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html). By contributing to this project, you agree to abide by its terms.

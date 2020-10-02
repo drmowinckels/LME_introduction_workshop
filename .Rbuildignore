@@ -1,1 +1,9 @@
 ^README\.Rmd$
+docs
+README*
+.Rproj.user
+LME_introduction_workshop.Rproj
+.git*
+^LICENSE\.md$
+^\.github$
+^CODE_OF_CONDUCT\.md$
